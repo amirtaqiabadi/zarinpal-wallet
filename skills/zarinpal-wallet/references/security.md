@@ -13,6 +13,7 @@ These rules are mandatory. They come from the wallet payment path this skill is 
 ## Secrets and logs
 
 - `ZARINPAL_MERCHANT_ID`, `PAYMENT_CALLBACK_HMAC_SECRET`, and `ZARINPAL_SANDBOX` come from the environment.
+- Sandbox sends a generated UUID as `merchant_id` and talks only to `https://sandbox.zarinpal.com`. After registration, replace that UUID with the merchant id ZarinPal issued and set `ZARINPAL_SANDBOX=false`. Do not send the sandbox UUID to `https://payment.zarinpal.com`.
 - Never log the merchant id, authority, HMAC, salt, callback secret, or a full card number.
 - Never put the merchant id or the authority in a query string you control, except the authority inside the payment URL the live ZarinPal docs tell you to open.
 - Gateway attempts store masked PAN and card hash only.
@@ -35,10 +36,10 @@ The callback URL is built on the server. Reject a client-supplied callback URL.
 
 ## Amount
 
-- Amount is an integer rial greater than zero, and at least the minimum from the live docs.
-- The verify request sends the amount stored on the attempt. Never send an amount from the callback or the client.
-- If the verify payload includes an amount and it differs from the locked row, do not credit. Mark the attempt failed only when its status is still pending.
-- Currency is `IRR` unless the live docs for this integration say otherwise. Do not mix rial and toman in one attempt.
+- Amount is an integer rial of at least 1000. The fee page documents that floor; error `-9` also means the amount is outside the allowed range.
+- The verify request sends the amount stored on the attempt. Never send an amount from the callback, the client, or a fee-inclusive suggestion.
+- If the verify code is `-50`, or the verify payload includes an amount and it differs from the locked row, do not credit. Mark the attempt failed only when its status is still pending.
+- Currency sent to ZarinPal is `IRR`. Do not send `IRT`. Do not mix rial and toman in one attempt.
 
 ## Concurrency
 
@@ -74,7 +75,8 @@ Status transitions:
 
 | code | type | when |
 | --- | --- | --- |
-| `AMOUNT_INVALID` | `VALIDATION_ERROR` | missing, non-integer, or below the live minimum |
+| `AMOUNT_INVALID` | `VALIDATION_ERROR` | missing, non-integer, or below 1000 rials |
+| `DESCRIPTION_INVALID` | `VALIDATION_ERROR` | missing, or longer than 500 characters |
 | `TEAM_FORBIDDEN` | `DOMAIN_ERROR` | caller is not an active owner of `teamId` |
 | `INVALID_CALLBACK_SIGNATURE` | `DOMAIN_ERROR` | HMAC missing or mismatch |
 | `ATTEMPT_NOT_FOUND` | `DOMAIN_ERROR` | no row for this authority and amount |
@@ -82,7 +84,7 @@ Status transitions:
 | `AMOUNT_MISMATCH` | `DOMAIN_ERROR` | verify amount differs from the stored amount |
 | `INSUFFICIENT_BALANCE` | `DOMAIN_ERROR` | reverse would take available balance below zero |
 | `REVERSE_NOT_ALLOWED` | `DOMAIN_ERROR` | not a `gateway_credit`, or attempt is not successful |
-| `REVERSE_WINDOW_EXPIRED` | `DOMAIN_ERROR` | older than 49 minutes |
+| `REVERSE_WINDOW_EXPIRED` | `DOMAIN_ERROR` | older than 30 minutes |
 | `ALREADY_REVERSED` | `DOMAIN_ERROR` | a `reverse` row already exists |
 | `GATEWAY_UNAVAILABLE` | `SYSTEM_ERROR` | request call failed before an authority existed |
 | `GATEWAY_REJECTED` | `SYSTEM_ERROR` | ZarinPal returned a documented rejection |
